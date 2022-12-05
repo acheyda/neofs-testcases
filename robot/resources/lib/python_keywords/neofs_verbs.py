@@ -4,7 +4,7 @@ import os
 import random
 import re
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 import allure
 import json_transformers
@@ -82,21 +82,23 @@ def get_range_hash(
     endpoint: Optional[str] = None,
     wallet_config: Optional[str] = None,
     xhdr: Optional[dict] = None,
+    session: Optional[str] = None,
 ):
     """
     GETRANGEHASH of given Object.
 
     Args:
-        wallet (str): wallet on whose behalf GETRANGEHASH is done
-        cid (str): ID of Container where we get the Object from
-        oid (str): Object ID
+        wallet: wallet on whose behalf GETRANGEHASH is done
+        cid: ID of Container where we get the Object from
+        oid: Object ID
         shell: executor for cli command
-        bearer (optional, str): path to Bearer Token file, appends to `--bearer` key
-        range_cut (str): Range to take hash from in the form offset1:length1,...,
+        bearer: path to Bearer Token file, appends to `--bearer` key
+        range_cut: Range to take hash from in the form offset1:length1,...,
                         value to pass to the `--range` parameter
-        endpoint (optional, str): NeoFS endpoint to send request to, appends to `--rpc-endpoint` key
-        wallet_config(optional, str): path to the wallet config
-        xhdr (optional, dict): Request X-Headers in form of Key=Value
+        endpoint: NeoFS endpoint to send request to, appends to `--rpc-endpoint` key
+        wallet_config: path to the wallet config
+        xhdr: Request X-Headers in form of Key=Values
+        session: Filepath to a JSON- or binary-encoded token of the object RANGEHASH session.
     Returns:
         None
     """
@@ -110,6 +112,7 @@ def get_range_hash(
         range=range_cut,
         bearer=bearer,
         xhdr=xhdr,
+        session=session,
     )
 
     # cutting off output about range offset and length
@@ -269,6 +272,63 @@ def get_range(
     return range_file_path, content
 
 
+@allure.step("Lock Object")
+def lock_object(
+    wallet: str,
+    cid: str,
+    oid: str,
+    shell: Shell,
+    lifetime: Optional[int] = None,
+    expire_at: Optional[int] = None,
+    endpoint: Optional[str] = None,
+    address: Optional[str] = None,
+    bearer: Optional[str] = None,
+    session: Optional[str] = None,
+    wallet_config: Optional[str] = None,
+    ttl: Optional[int] = None,
+    xhdr: Optional[dict] = None,
+) -> str:
+    """
+    Lock object in container.
+
+    Args:
+        address: Address of wallet account.
+        bearer: File with signed JSON or binary encoded bearer token.
+        cid: Container ID.
+        oid: Object ID.
+        lifetime: Lock lifetime.
+        expire_at: Lock expiration epoch.
+        endpoint: Remote node address.
+        session: Path to a JSON-encoded container session token.
+        ttl: TTL value in request meta header (default 2).
+        wallet: WIF (NEP-2) string or path to the wallet or binary key.
+        xhdr: Dict with request X-Headers.
+
+    Returns:
+        Lock object ID
+    """
+
+    cli = NeofsCli(shell, NEOFS_CLI_EXEC, wallet_config or WALLET_CONFIG)
+    result = cli.object.lock(
+        rpc_endpoint=endpoint or NEOFS_ENDPOINT,
+        lifetime=lifetime,
+        expire_at=expire_at,
+        address=address,
+        wallet=wallet,
+        cid=cid,
+        oid=oid,
+        bearer=bearer,
+        xhdr=xhdr,
+        session=session,
+        ttl=ttl,
+    )
+
+    # splitting CLI output to lines and taking the penultimate line
+    id_str = result.stdout.strip().split("\n")[0]
+    oid = id_str.split(":")[1]
+    return oid.strip()
+
+
 @allure.step("Search object")
 def search_object(
     wallet: str,
@@ -346,7 +406,7 @@ def get_netmap_netinfo(
     address: Optional[str] = None,
     ttl: Optional[int] = None,
     xhdr: Optional[dict] = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """
     Get netmap netinfo output from node
 
